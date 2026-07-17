@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Cost Anomaly Detection with SNS alerting
+
+Parameters:
+  AnomalyThreshold:
+    Type: Number
+    Default: 100
+    Description: Anomaly threshold in USD for alerts
+  NotificationEmail:
+    Type: String
+    Description: Email for anomaly alerts
+
+Resources:
+  CostAnomalySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Cost Anomaly Alerts
+      TopicName: !Sub '${AWS::StackName}-cost-anomaly'
+      Subscription:
+        - Endpoint: !Ref NotificationEmail
+          Protocol: email
+
+  AnomalyMonitor:
+    Type: AWS::CE::AnomalyMonitor
+    Properties:
+      MonitorName: ContosoProductionAnomalyMonitor
+      MonitorType: DIMENSIONAL
+      MonitorDimension: SERVICE
+
+  AnomalySubscription:
+    Type: AWS::CE::AnomalySubscription
+    Properties:
+      SubscriptionName: ContosoAnomalyAlerts
+      MonitorArnList:
+        - !GetAtt AnomalyMonitor.MonitorArn
+      Subscribers:
+        - Type: SNS
+          Address: !Ref CostAnomalySNSTopic
+      Threshold: !Ref AnomalyThreshold
+      Frequency: DAILY
+
+  CostExplorerSavedReport:
+    Type: AWS::CUR::ReportDefinition
+    Properties:
+      ReportName: contoso-cost-usage-report
+      TimeUnit: HOURLY
+      Format: textORcsv
+      Compression: GZIP
+      S3Bucket: !Sub 'contoso-cur-${AWS::AccountId}'
+      S3Prefix: cost-reports/
+      S3Region: !Ref AWS::Region
+      AdditionalSchemaElements:
+        - RESOURCES
+      RefreshClosedReports: true
+      ReportVersioning: OVERWRITE_REPORT
+
+Outputs:
+  AnomalyMonitorArn:
+    Value: !GetAtt AnomalyMonitor.MonitorArn
+  SNSTopicArn:
+    Value: !Ref CostAnomalySNSTopic

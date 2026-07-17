@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: KMS Customer Managed Keys for database encryption with automatic rotation
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for key naming
+
+Resources:
+  RDSEncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub 'RDS encryption key for ${Environment}'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow RDS service
+            Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+              - 'kms:CreateGrant'
+            Resource: '*'
+          - Sid: Prevent DBA key management
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Action:
+              - 'kms:ScheduleKeyDeletion'
+              - 'kms:DisableKey'
+            Resource: '*'
+            Condition:
+              StringLike:
+                'aws:PrincipalArn': 'arn:aws:iam::*:role/DBA*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: RDSEncryption
+
+  RDSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/rds-${Environment}'
+      TargetKeyId: !Ref RDSEncryptionKey
+
+  EBSEncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub 'EBS encryption key for ${Environment}'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow EBS service
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+              - 'kms:CreateGrant'
+            Resource: '*'
+
+  EBSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/ebs-${Environment}'
+      TargetKeyId: !Ref EBSEncryptionKey
+
+Outputs:
+  RDSKeyId:
+    Value: !Ref RDSEncryptionKey
+  EBSKeyId:
+    Value: !Ref EBSEncryptionKey

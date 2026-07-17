@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Systems Manager Patch Manager baseline and maintenance windows
+
+Resources:
+  LinuxPatchBaseline:
+    Type: AWS::SSM::PatchBaseline
+    Properties:
+      Name: ContosoProdLinuxBaseline
+      Description: Production Linux patch baseline - critical and security only
+      OperatingSystem: AMAZON_LINUX_2
+      ApprovalRules:
+        PatchRules:
+          - PatchFilterGroup:
+              PatchFilters:
+                - Key: CLASSIFICATION
+                  Values:
+                    - Security
+                    - Bugfix
+                - Key: SEVERITY
+                  Values:
+                    - Critical
+                    - Important
+            ApproveAfterDays: 7
+            ComplianceLevel: CRITICAL
+      Tags:
+        - Key: Environment
+          Value: Production
+
+  WindowsPatchBaseline:
+    Type: AWS::SSM::PatchBaseline
+    Properties:
+      Name: ContosoProdWindowsBaseline
+      Description: Production Windows patch baseline
+      OperatingSystem: WINDOWS
+      ApprovalRules:
+        PatchRules:
+          - PatchFilterGroup:
+              PatchFilters:
+                - Key: CLASSIFICATION
+                  Values:
+                    - SecurityUpdates
+                    - CriticalUpdates
+                - Key: MSRC_SEVERITY
+                  Values:
+                    - Critical
+                    - Important
+            ApproveAfterDays: 7
+            ComplianceLevel: CRITICAL
+
+  MaintenanceWindow:
+    Type: AWS::SSM::MaintenanceWindow
+    Properties:
+      Name: ProductionPatchingWindow
+      Description: Saturday 2-6 AM ET maintenance window
+      Schedule: cron(0 2 ? * SAT *)
+      Duration: 4
+      Cutoff: 1
+      AllowUnassociatedTargets: false
+
+  PatchingTask:
+    Type: AWS::SSM::MaintenanceWindowTask
+    Properties:
+      WindowId: !Ref MaintenanceWindow
+      TaskType: RUN_COMMAND
+      TaskArn: AWS-RunPatchBaseline
+      ServiceRoleArn: !GetAtt MaintenanceWindowRole.Arn
+      Priority: 1
+      MaxConcurrency: '25%'
+      MaxErrors: '10%'
+      Targets:
+        - Key: tag:PatchGroup
+          Values:
+            - Production
+
+  MaintenanceWindowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonSSMMaintenanceWindowRole'
+
+Outputs:
+  LinuxBaselineId:
+    Value: !Ref LinuxPatchBaseline
+  WindowsBaselineId:
+    Value: !Ref WindowsPatchBaseline

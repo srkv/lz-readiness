@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DR failover automation using Systems Manager Automation
+
+Resources:
+  DRFailoverDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: DR-RDS-Failover-us-west-2
+      DocumentType: Automation
+      Content:
+        schemaVersion: '0.3'
+        description: Automated RDS failover to DR region
+        parameters:
+          DBInstanceIdentifier:
+            type: String
+            description: RDS instance identifier
+          TargetRegion:
+            type: String
+            default: us-west-2
+        mainSteps:
+          - name: PromoteReadReplica
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: rds
+              Api: PromoteReadReplica
+              DBInstanceIdentifier: '{{ DBInstanceIdentifier }}'
+          - name: WaitForAvailable
+            action: 'aws:waitForAwsResourceProperty'
+            inputs:
+              Service: rds
+              Api: DescribeDBInstances
+              DBInstanceIdentifier: '{{ DBInstanceIdentifier }}'
+              PropertySelector: '$.DBInstances[0].DBInstanceStatus'
+              DesiredValues:
+                - available
+          - name: UpdateRoute53
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: route53
+              Api: ChangeResourceRecordSets
+              HostedZoneId: PLACEHOLDER_ZONE_ID
+              ChangeBatch:
+                Changes:
+                  - Action: UPSERT
+                    ResourceRecordSet:
+                      Name: db.contoso.internal
+                      Type: CNAME
+                      TTL: 60
+                      ResourceRecords:
+                        - Value: '{{ DBInstanceIdentifier }}.{{ TargetRegion }}.rds.amazonaws.com'
+
+  DRTestDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: DR-Tabletop-Exercise
+      DocumentType: Automation
+      Content:
+        schemaVersion: '0.3'
+        description: DR tabletop exercise validation
+        mainSteps:
+          - name: ValidateBackups
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: backup
+              Api: ListRecoveryPointsByBackupVault
+              BackupVaultName: contoso-dr-vault
+          - name: CheckCrossRegionReplication
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: backup
+              Api: DescribeCopyJob
+              CopyJobId: PLACEHOLDER
+
+Outputs:
+  FailoverDocumentARN:
+    Value: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${DRFailoverDocument}'
+  TestDocumentARN:
+    Value: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${DRTestDocument}'

@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Budgets with alerting for cost control
+
+Parameters:
+  MonthlyBudgetLimit:
+    Type: Number
+    Default: 50000
+    Description: Monthly budget limit in USD
+  NotificationEmail:
+    Type: String
+    Description: Email for budget alerts
+
+Resources:
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: ContosoMonthlyBudget
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetLimit
+          Unit: USD
+        TimeUnit: MONTHLY
+        BudgetType: COST
+        CostFilters:
+          TagKeyValue:
+            - 'user:contoso:environment$Production'
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref NotificationEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref NotificationEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref NotificationEmail
+
+  EC2ComputeBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: ContosoEC2ComputeBudget
+        BudgetLimit:
+          Amount: 15000
+          Unit: USD
+        TimeUnit: MONTHLY
+        BudgetType: COST
+        CostFilters:
+          Service:
+            - Amazon Elastic Compute Cloud - Compute
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 90
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref NotificationEmail
+
+Outputs:
+  MonthlyBudgetName:
+    Value: !Ref MonthlyBudget
+  EC2BudgetName:
+    Value: !Ref EC2ComputeBudget
