@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Config rules for PCI-DSS and CIS compliance monitoring
+
+Resources:
+  EncryptedVolumesRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: encrypted-volumes
+      Description: Ensure all EBS volumes are encrypted
+      Source:
+        Owner: AWS
+        SourceIdentifier: ENCRYPTED_VOLUMES
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::Volume
+
+  S3PublicReadRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: s3-bucket-public-read-prohibited
+      Description: Ensure S3 buckets do not allow public read access
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_PUBLIC_READ_PROHIBITED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::S3::Bucket
+
+  RDSEncryptionRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: rds-storage-encrypted
+      Description: Ensure RDS instances are encrypted at rest
+      Source:
+        Owner: AWS
+        SourceIdentifier: RDS_STORAGE_ENCRYPTED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::RDS::DBInstance
+
+  MandatoryTagsRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: required-tags
+      Description: Ensure mandatory tags are present on resources
+      Source:
+        Owner: AWS
+        SourceIdentifier: REQUIRED_TAGS
+      InputParameters:
+        tag1Key: contoso:environment
+        tag2Key: business-unit
+        tag3Key: cost-center
+        tag4Key: data-classification
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::Instance
+          - AWS::RDS::DBInstance
+          - AWS::S3::Bucket
+
+  RootAccountMFARule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: root-account-mfa-enabled
+      Description: Ensure root account has MFA enabled
+      Source:
+        Owner: AWS
+        SourceIdentifier: ROOT_ACCOUNT_MFA_ENABLED
+
+  CloudTrailEnabledRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: cloudtrail-enabled
+      Description: Ensure CloudTrail is enabled in all regions
+      Source:
+        Owner: AWS
+        SourceIdentifier: CLOUD_TRAIL_ENABLED
+
+  IAMPasswordPolicyRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: iam-password-policy
+      Description: Ensure IAM password policy meets requirements
+      Source:
+        Owner: AWS
+        SourceIdentifier: IAM_PASSWORD_POLICY
+      InputParameters:
+        RequireUppercaseCharacters: true
+        RequireLowercaseCharacters: true
+        RequireNumbers: true
+        MinimumPasswordLength: 14
+        PasswordReusePrevention: 24
+        MaxPasswordAge: 90
+
+Outputs:
+  ConfigRules:
+    Value: !Sub |
+      Deployed 7 Config Rules:
+      - ${EncryptedVolumesRule}
+      - ${S3PublicReadRule}
+      - ${RDSEncryptionRule}
+      - ${MandatoryTagsRule}
+      - ${RootAccountMFARule}
+      - ${CloudTrailEnabledRule}
+      - ${IAMPasswordPolicyRule}

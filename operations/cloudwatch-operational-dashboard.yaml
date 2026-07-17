@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Centralized CloudWatch dashboard for operational metrics
+
+Resources:
+  OperationalDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: ContosoOperationalOverview
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/EC2", "CPUUtilization", {"stat": "Average"}]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "EC2 CPU Utilization"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/RDS", "DatabaseConnections", {"stat": "Sum"}],
+                  [".", "CPUUtilization", {"stat": "Average"}]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "RDS Metrics"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/ApplicationELB", "TargetResponseTime", {"stat": "Average"}],
+                  [".", "HTTPCode_Target_5XX_Count", {"stat": "Sum"}]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "ALB Performance"
+              }
+            }
+          ]
+        }
+
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-high-cpu'
+      AlarmDescription: Alert when EC2 CPU exceeds 80%
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  DashboardURL:
+    Value: !Sub 'https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=ContosoOperationalOverview'
