@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Security Hub with PCI-DSS and CIS compliance standards
+
+Resources:
+  SecurityHub:
+    Type: AWS::SecurityHub::Hub
+    Properties:
+      Tags:
+        compliance: pci-dss
+
+  PCIDSSStandard:
+    Type: AWS::SecurityHub::Standard
+    Properties:
+      StandardsArn: !Sub 'arn:aws:securityhub:${AWS::Region}::standards/pci-dss/v/3.2.1'
+    DependsOn: SecurityHub
+
+  CISStandard:
+    Type: AWS::SecurityHub::Standard
+    Properties:
+      StandardsArn: !Sub 'arn:aws:securityhub:${AWS::Region}::standards/cis-aws-foundations-benchmark/v/1.4.0'
+    DependsOn: SecurityHub
+
+  SecurityHubSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Security Hub Findings
+      TopicName: !Sub '${AWS::StackName}-securityhub-findings'
+
+  SecurityHubEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Notify on Security Hub critical findings
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - Security Hub Findings - Imported
+        detail:
+          findings:
+            Severity:
+              Label:
+                - CRITICAL
+                - HIGH
+      State: ENABLED
+      Targets:
+        - Arn: !Ref SecurityHubSNSTopic
+          Id: SecurityHubSNSTarget
+
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref SecurityHubSNSTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: 'sns:Publish'
+            Resource: !Ref SecurityHubSNSTopic
+
+Outputs:
+  SecurityHubConsole:
+    Value: !Sub 'https://console.aws.amazon.com/securityhub/home?region=${AWS::Region}#/summary'
