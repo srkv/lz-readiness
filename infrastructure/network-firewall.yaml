@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Network Firewall for centralized traffic inspection
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Inspection VPC ID
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Firewall subnets (minimum 2 AZs)
+
+Resources:
+  FirewallPolicy:
+    Type: AWS::NetworkFirewall::FirewallPolicy
+    Properties:
+      FirewallPolicyName: !Sub '${AWS::StackName}-policy'
+      FirewallPolicy:
+        StatelessDefaultActions:
+          - aws:forward_to_sfe
+        StatelessFragmentDefaultActions:
+          - aws:forward_to_sfe
+        StatefulRuleGroupReferences:
+          - ResourceArn: !GetAtt ThreatIntelRuleGroup.RuleGroupArn
+
+  ThreatIntelRuleGroup:
+    Type: AWS::NetworkFirewall::RuleGroup
+    Properties:
+      RuleGroupName: !Sub '${AWS::StackName}-threat-intel'
+      Type: STATEFUL
+      Capacity: 100
+      RuleGroup:
+        RulesSource:
+          RulesSourceList:
+            TargetTypes:
+              - TLS_SNI
+              - HTTP_HOST
+            Targets:
+              - '.malware.com'
+              - '.phishing.net'
+            GeneratedRulesType: DENYLIST
+
+  Firewall:
+    Type: AWS::NetworkFirewall::Firewall
+    Properties:
+      FirewallName: !Sub '${AWS::StackName}-firewall'
+      FirewallPolicyArn: !Ref FirewallPolicy
+      VpcId: !Ref VpcId
+      SubnetMappings:
+        - SubnetId: !Select [0, !Ref SubnetIds]
+        - SubnetId: !Select [1, !Ref SubnetIds]
+      Tags:
+        - Key: Name
+          Value: CentralizedInspectionFirewall
+
+  FirewallLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/networkfirewall/${AWS::StackName}'
+      RetentionInDays: 90
+
+  FirewallLogging:
+    Type: AWS::NetworkFirewall::LoggingConfiguration
+    Properties:
+      FirewallArn: !Ref Firewall
+      LoggingConfiguration:
+        LogDestinationConfigs:
+          - LogType: ALERT
+            LogDestinationType: CloudWatchLogs
+            LogDestination:
+              logGroup: !Ref FirewallLogGroup
+
+Outputs:
+  FirewallId:
+    Value: !Ref Firewall
+  FirewallArn:
+    Value: !GetAtt Firewall.FirewallArn
